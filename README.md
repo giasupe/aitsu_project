@@ -40,8 +40,3 @@ dotnet run
 `persona.txt`にAPIへ渡す人格設定を記述します。`OPENAI_MODEL`で使用するモデルを変更できます。
 
 ## 構成
-
-- `Program.cs`: コンソール入出力
-- `ConversationService.cs`: 会話履歴の管理
-- `OpenAIClient.cs`: OpenAI Responses APIとの通信
-- `AitsuOptions.cs`: 環境変数と人格設定の読み込み
