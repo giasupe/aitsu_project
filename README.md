@@ -1,42 +1,76 @@
 # aitsu
 
-aitsuは、AIとVRChatを連携するシステムです。
+AIとVRChatの連携を目標にしたC#プロジェクトです。
 
-## 現在の構成
+現在は、コンソールから入力を受け取り、入力内容を表示する最小構成です。
 
-初期開発では、aitsuシステムの最小構成を作成しています。
+## ディレクトリ構造
 
-- AIとのテキスト対話
-- コンソールへの応答表示
+```text
+aitsu_project/
+├─ Program.cs    # メインプログラム
+├─ aitsu.csproj  # .NETプロジェクト設定
+├─ README.md     # この説明書
+└─ .gitignore    # ビルド生成物の除外設定
+```
 
-## 開発方針
+`bin/`と`obj/`は、`dotnet run`や`dotnet build`で自動生成されるため、Git管理から除外しています。
 
-将来の音声認識、音声合成、アバターギミックとの連携を考慮し、実装言語にはC#を使用します。
+## 必要な環境
 
-将来的な連携対象は以下です。
+- .NET 8 SDK
 
-- 音声認識
-- AIによる応答生成
-- 音声合成
-- VRChat Chatboxへのテキスト表示
-- OSCによるアバターパラメータ制御
+確認コマンド:
 
-## 現在の実装
-
-コンソールから入力した文章をOpenAI Responses APIへ送信し、応答をコンソールに表示します。
-会話履歴はプロセス実行中に保持され、`/clear`で削除できます。
+```powershell
+dotnet --version
+```
 
 ## 実行方法
 
-1. [.env.example](.env.example)を参考に`OPENAI_API_KEY`を環境変数へ設定します。
-2. .NET 8 SDKをインストールします。
-3. プロジェクトのルートで次のコマンドを実行します。
+プロジェクトのルートで実行します。
 
 ```powershell
-$env:OPENAI_API_KEY = "APIキー"
+cd C:\Users\giasupe\Documents\.github\aitsu_project
 dotnet run
 ```
 
-`persona.txt`にAPIへ渡す人格設定を記述します。`OPENAI_MODEL`で使用するモデルを変更できます。
+入力した文字が表示されます。
 
-## 構成
+```text
+> こんにちは
+You: こんにちは
+> /exit
+```
+
+`/exit`を入力すると終了します。
+
+空入力は無視されます。`Ctrl+C`でも終了できます。
+
+## Program.csの処理
+
+1. `while (true)`で入力処理を繰り返す
+2. `Console.ReadLine()`で入力を受け取る
+3. `/exit`なら`break`で終了する
+4. それ以外の入力をコンソールへ表示する
+
+## 作成手順
+
+空のフォルダから作成する場合は、次のコマンドを実行します。
+
+```powershell
+mkdir aitsu_project
+cd aitsu_project
+dotnet new console
+dotnet run
+```
+
+生成された`Program.cs`を書き換えた後、再度`dotnet run`を実行します。
+
+## 今後の予定
+
+- OpenAI APIとの接続
+- 会話履歴の管理
+- 音声認識と音声合成
+- VRChat Chatboxへの表示
+- OSCによるアバターパラメータ制御
