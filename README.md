@@ -1,29 +1,51 @@
 # aitsu
 
-AIとVRChatの連携を目標にしたC#プロジェクトです。
+aitsuは、AIとVRChatの連携を目標にしたC#プロジェクトです。
 
-現在は、コンソールから入力を受け取り、入力内容を表示する最小構成です。
+初期型では、外部の有料APIを使わず、ローカルで動作するOllamaと接続してCLI上で会話します。
 
 ## ディレクトリ構造
 
 ```text
 aitsu_project/
-├─ Program.cs    # メインプログラム
-├─ aitsu.csproj  # .NETプロジェクト設定
-├─ README.md     # この説明書
-└─ .gitignore    # ビルド生成物の除外設定
+├─ Program.cs              # CLIの入出力とアプリケーション起動
+├─ AitsuOptions.cs         # Ollamaと人格設定の読み込み
+├─ ConversationService.cs  # 会話履歴の管理
+├─ OllamaClient.cs         # Ollama APIとの通信
+├─ persona.txt             # aitsuの人格設定
+├─ aitsu.csproj            # .NETプロジェクト設定
+├─ README.md               # この説明書
+└─ .gitignore              # Git管理から除外するファイル
 ```
 
-`bin/`と`obj/`は、`dotnet run`や`dotnet build`で自動生成されるため、Git管理から除外しています。
+APIキーや外部の有料APIは使用しません。
 
 ## 必要な環境
 
 - .NET 8 SDK
+- Ollama
+- Ollamaでダウンロードしたチャットモデル
 
-確認コマンド:
+## Ollamaの準備
+
+Ollamaをインストールした後、Ollamaが起動している状態でモデルを取得します。
+
+例:
 
 ```powershell
-dotnet --version
+ollama pull llama3.2
+```
+
+モデルが使用できるか確認するには、次のコマンドを実行します。
+
+```powershell
+ollama run llama3.2
+```
+
+Ollamaが通常の設定で起動している場合、aitsuは次のURLへ接続します。
+
+```text
+http://localhost:11434/api/chat
 ```
 
 ## 実行方法
@@ -35,42 +57,84 @@ cd C:\Users\giasupe\Documents\.github\aitsu_project
 dotnet run
 ```
 
-入力した文字が表示されます。
+起動後、`You>`の後にメッセージを入力してください。
 
 ```text
-> こんにちは
-You: こんにちは
-> /exit
+aitsuを開始しました。
+終了: /exit  履歴削除: /clear
+You> こんにちは
+aitsu> こんにちは。今日はどうしましたか？
 ```
 
-`/exit`を入力すると終了します。
+## CLIコマンド
 
-空入力は無視されます。`Ctrl+C`でも終了できます。
+- `/exit`: プログラムを終了
+- `/clear`: 会話履歴を削除
+- `Ctrl+C`: プログラムを終了
 
-## Program.csの処理
+会話履歴は実行中のメモリに最大20メッセージ保持されます。
+プログラムを終了すると履歴は削除されます。
 
-1. `while (true)`で入力処理を繰り返す
-2. `Console.ReadLine()`で入力を受け取る
-3. `/exit`なら`break`で終了する
-4. それ以外の入力をコンソールへ表示する
+## 人格設定
 
-## 作成手順
+人格は`persona.txt`に記述します。
+この内容はOllamaへの`system`メッセージとして毎回送信されます。
 
-空のフォルダから作成する場合は、次のコマンドを実行します。
+例えば、次のように変更できます。
+
+```text
+あなたは落ち着いた雰囲気のAIです。
+必ず日本語で答えてください。
+返答は短く、分かりやすくしてください。
+```
+
+`persona.txt`を変更した後に`dotnet run`を実行すると、変更内容が反映されます。
+
+## 環境変数による設定
+
+既定値を変更したい場合は、PowerShellで環境変数を設定できます。
 
 ```powershell
-mkdir aitsu_project
-cd aitsu_project
-dotnet new console
+$env:OLLAMA_MODEL = "llama3.2"
+$env:OLLAMA_ENDPOINT = "http://localhost:11434/api/chat"
+$env:AITSU_PERSONA_FILE = "persona.txt"
 dotnet run
 ```
 
-生成された`Program.cs`を書き換えた後、再度`dotnet run`を実行します。
+`AITSU_PERSONA_FILE`には、別の人格ファイルのパスも指定できます。
+
+## 処理の流れ
+
+1. `AitsuOptions.cs`がOllamaのURL、モデル、人格設定を読み込む
+2. `Program.cs`がCLIからユーザー入力を受け取る
+3. `ConversationService.cs`が会話履歴を管理する
+4. `OllamaClient.cs`が人格設定・履歴・入力をOllamaへ送信する
+5. Ollamaの返答をCLIへ表示する
+6. 成功した会話を次のリクエスト用に保存する
+
+## トラブルシューティング
+
+### Ollamaに接続できない
+
+Ollamaが起動しているか確認してください。
+
+```powershell
+ollama list
+```
+
+### モデルが見つからない
+
+使用するモデルをダウンロードしてください。
+
+```powershell
+ollama pull llama3.2
+```
+
+`OLLAMA_MODEL`を設定した場合は、ダウンロードしたモデル名と一致しているか確認してください。
 
 ## 今後の予定
 
-- OpenAI APIとの接続
-- 会話履歴の管理
-- 音声認識と音声合成
+- 音声認識
+- 音声合成
 - VRChat Chatboxへの表示
 - OSCによるアバターパラメータ制御
