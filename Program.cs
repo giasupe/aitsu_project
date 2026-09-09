@@ -6,6 +6,7 @@ internal static class Program
 {
     public static async Task Main()
     {
+        Console.InputEncoding = Encoding.UTF8;
         Console.OutputEncoding = Encoding.UTF8;
 
         using var cancellation = new CancellationTokenSource();
@@ -20,7 +21,7 @@ internal static class Program
             var options = AitsuOptions.Load();
             using var httpClient = new HttpClient
             {
-                Timeout = TimeSpan.FromMinutes(5)
+                Timeout = System.Threading.Timeout.InfiniteTimeSpan
             };
             var client = new OllamaClient(httpClient, options);
             var conversation = new ConversationService(client);
@@ -31,7 +32,17 @@ internal static class Program
             while (!cancellation.IsCancellationRequested)
             {
                 Console.Write("You> ");
-                var input = Console.ReadLine();
+                string? input;
+                try
+                {
+                    input = await Console.In.ReadLineAsync(
+                        cancellation.Token);
+                }
+                catch (OperationCanceledException)
+                    when (cancellation.IsCancellationRequested)
+                {
+                    break;
+                }
 
                 if (input is null ||
                     input.Equals(

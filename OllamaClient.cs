@@ -1,9 +1,10 @@
 using System.Net.Http.Json;
+using System.Text;
 using System.Text.Json;
 
 namespace Aitsu;
 
-public sealed class OllamaClient
+public sealed class OllamaClient : IChatClient
 {
     private readonly HttpClient _httpClient;
     private readonly AitsuOptions _options;
@@ -53,25 +54,19 @@ public sealed class OllamaClient
             Content = JsonContent.Create(requestBody)
         };
 
-        HttpResponseMessage response;
+        using var requestTimeout = CancellationTokenSource
+            .CreateLinkedTokenSource(cancellationToken);
+        requestTimeout.CancelAfter(AitsuOptions.RequestTimeout);
+
         try
         {
-            response = await _httpClient.SendAsync(
-                request,
-                HttpCompletionOption.ResponseHeadersRead,
-                cancellationToken);
-        }
-        catch (HttpRequestException exception)
-        {
-            throw new InvalidOperationException(
-                "Ollamaに接続できません。Ollamaが起動しているか確認してください。",
-                exception);
-        }
-
-        using (response)
-        {
-            var responseBody = await response.Content.ReadAsStringAsync(
-                cancellationToken);
+            using var response = await _httpClient.SendAsync(
+                    request,
+                    HttpCompletionOption.ResponseHeadersRead,
+                    requestTimeout.Token);
+            var responseBody = await ReadResponseBodyAsync(
+                response.Content,
+                requestTimeout.Token);
 
             if (!response.IsSuccessStatusCode)
             {
@@ -101,7 +96,71 @@ public sealed class OllamaClient
                     "Ollamaの応答が空でした。");
             }
 
-            return text.Trim();
+            return LimitResponseLength(text.Trim());
         }
+        catch (OperationCanceledException exception)
+            when (!cancellationToken.IsCancellationRequested
+                && requestTimeout.IsCancellationRequested)
+        {
+            throw new TimeoutException(
+                $"Ollamaへのリクエストが{AitsuOptions.RequestTimeout.TotalMinutes:0}分でタイムアウトしました。",
+                exception);
+        }
+        catch (HttpRequestException exception)
+        {
+            throw new InvalidOperationException(
+                "Ollamaに接続できません。Ollamaが起動しているか確認してください。",
+                exception);
+        }
+        catch (JsonException exception)
+        {
+            throw new InvalidOperationException(
+                "Ollamaの応答をJSONとして解析できませんでした。",
+                exception);
+        }
+    }
+
+    private static async Task<string> ReadResponseBodyAsync(
+        HttpContent content,
+        CancellationToken cancellationToken)
+    {
+        await using var stream = await content.ReadAsStreamAsync(
+            cancellationToken);
+        using var reader = new StreamReader(stream);
+        var builder = new StringBuilder();
+        var buffer = new char[8_192];
+
+        while (true)
+        {
+            var charactersRead = await reader.ReadAsync(
+                buffer.AsMemory(),
+                cancellationToken);
+            if (charactersRead == 0)
+            {
+                return builder.ToString();
+            }
+
+            if (builder.Length + charactersRead
+                > AitsuOptions.MaximumResponseBodyCharacters)
+            {
+                throw new InvalidOperationException(
+                    $"Ollamaの応答が{AitsuOptions.MaximumResponseBodyCharacters}文字を超えています。");
+            }
+
+            builder.Append(buffer, 0, charactersRead);
+        }
+    }
+
+    private static string LimitResponseLength(string response)
+    {
+        if (response.Length <= AitsuOptions.MaximumResponseCharacters)
+        {
+            return response;
+        }
+
+        const string truncationNotice = "\n[応答が長いため省略しました]";
+        var contentLength = AitsuOptions.MaximumResponseCharacters
+            - truncationNotice.Length;
+        return response[..contentLength].TrimEnd() + truncationNotice;
     }
 }

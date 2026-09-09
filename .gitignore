@@ -1,4 +1,10 @@
 bin/
 obj/
+.vs/
+.idea/
+.vscode/
 *.user
+*.suo
+*.log
+publish/
 .env

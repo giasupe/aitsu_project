@@ -4,11 +4,10 @@ public sealed record ConversationMessage(string Role, string Content);
 
 public sealed class ConversationService
 {
-    private const int MaximumHistoryMessages = 20;
-    private readonly OllamaClient _client;
+    private readonly IChatClient _client;
     private readonly List<ConversationMessage> _history = [];
 
-    public ConversationService(OllamaClient client)
+    public ConversationService(IChatClient client)
     {
         _client = client;
     }
@@ -17,6 +16,20 @@ public sealed class ConversationService
         string userMessage,
         CancellationToken cancellationToken = default)
     {
+        if (string.IsNullOrWhiteSpace(userMessage))
+        {
+            throw new ArgumentException(
+                "入力が空です。",
+                nameof(userMessage));
+        }
+
+        if (userMessage.Length > AitsuOptions.MaximumInputCharacters)
+        {
+            throw new ArgumentException(
+                $"入力は{AitsuOptions.MaximumInputCharacters}文字以内で指定してください。",
+                nameof(userMessage));
+        }
+
         var response = await _client.GenerateResponseAsync(
             userMessage,
             _history,
@@ -36,13 +49,16 @@ public sealed class ConversationService
 
     private void TrimHistory()
     {
-        if (_history.Count <= MaximumHistoryMessages)
+        while (_history.Count > AitsuOptions.MaximumHistoryMessages
+            || GetHistoryCharacters() > AitsuOptions.MaximumHistoryCharacters)
         {
-            return;
+            var messagesToRemove = Math.Min(2, _history.Count);
+            _history.RemoveRange(0, messagesToRemove);
         }
+    }
 
-        _history.RemoveRange(
-            0,
-            _history.Count - MaximumHistoryMessages);
+    private int GetHistoryCharacters()
+    {
+        return _history.Sum(message => message.Content.Length);
     }
 }
