@@ -1,7 +1,7 @@
 # aitsu
 
 aitsuは、ローカルで動作するOllamaと接続して会話するC#コンソールアプリケーションです。
-将来的なVRChat連携を想定しています。
+オプションで、AIの返答をVRChatのChatboxへOSC経由で送信できます。
 
 ## 現在の機能
 
@@ -9,27 +9,37 @@ aitsuは、ローカルで動作するOllamaと接続して会話するC#コン�
 - Ollama Chat APIへのリクエスト
 - Ollamaのストリーミング応答の逐次表示
 - 人格設定と会話履歴を含む応答生成
-- コンソールへの応答表示
-- 実行中の会話履歴の削除
+- `/clear`による会話履歴の削除
+- VRChat ChatboxへのOSC送信
+- AI応答中のVRChat Chatbox入力中表示
 
-OpenAI APIなどの外部有料APIは使用しません。
+Chatbox連携は既定で無効です。
+有効にした場合も、返答を1トークンずつ送信せず、AIの返答完了後に送信します。
 
 ## 構成
 
 ```text
 aitsu_project/
-├─ Program.cs              # CLI入出力とアプリケーション起動
-├─ AitsuOptions.cs         # 環境変数、接続先、人格設定の読み込み
-├─ IChatClient.cs          # AIクライアントの共通インターフェース
-├─ ConversationService.cs  # 入力検証と会話履歴の管理
-├─ OllamaClient.cs         # Ollama APIとの通信と応答解析
-├─ persona.txt             # Ollamaへ渡す人格設定
-├─ aitsu.csproj            # .NETプロジェクト設定
-├─ global.json             # .NET SDKの選択設定
-├─ .editorconfig           # コード整形規則
-├─ .gitignore              # Git管理から除外するファイル
-└─ README.md               # この説明書
+├─ Program.cs                 # CLI入出力とアプリケーション起動
+├─ AitsuOptions.cs            # Ollama・Chatbox・人格設定の読み込み
+├─ IChatClient.cs             # AIクライアントの共通インターフェース
+├─ ConversationService.cs     # 入力検証と会話履歴の管理
+├─ OllamaClient.cs            # Ollama APIとの通信と応答解析
+├─ IChatboxClient.cs          # Chatbox送信の共通インターフェース
+├─ VrChatChatboxClient.cs     # VRChatへのOSC UDP送信
+├─ OscPacketEncoder.cs        # OSCパケットのエンコード
+├─ ChatboxTextFormatter.cs    # 144文字・9行への分割
+├─ persona.txt                # Ollamaへ渡す人格設定
+├─ persona.example.txt        # 人格設定の例
+├─ aitsu.csproj               # .NETプロジェクト設定
+├─ global.json                # .NET SDKの選択設定
+├─ .editorconfig              # コード整形規則
+├─ .gitignore                 # Git管理から除外するファイル
+└─ README.md                  # この説明書
 ```
+
+外部の有料AI APIは使用しません。
+OSCパケットは.NET標準のUDP機能で作成するため、OSC用のNuGetパッケージも使用していません。
 
 ## 必要な環境
 
@@ -37,34 +47,11 @@ aitsu_project/
 - .NET 8 SDK
 - Ollama
 - Ollamaで取得したチャットモデル
+- VRChat（Chatbox連携を使う場合）
 
-現在の推奨SDKは`8.0.424`です。`global.json`で.NET 8 SDKを選択します。
-OpenAI APIキーは不要です。
+## Ollamaの準備
 
-## 環境の導入
-
-### .NET 8 SDK
-
-PowerShellで実行します。
-
-```powershell
-winget install --id Microsoft.DotNet.SDK.8 --exact
-```
-
-### Ollama
-
-```powershell
-winget install --id Ollama.Ollama --exact
-```
-
-インストール後、Ollamaアプリケーションを起動します。
-アプリケーションを使用しない場合は、次のコマンドでサーバーを起動します。
-
-```powershell
-ollama serve
-```
-
-モデルを取得します。
+Ollamaを起動した状態で、使用するモデルを取得します。
 
 ```powershell
 ollama pull llama3.2
@@ -93,6 +80,7 @@ dotnet run
 ```text
 aitsuを開始しました。
 終了: /exit  履歴削除: /clear
+VRChat Chatbox: 無効
 You> こんにちは
 aitsu> こんにちは。今日はどうしましたか？
 ```
@@ -101,6 +89,10 @@ aitsu> こんにちは。今日はどうしましたか？
 
 - `/exit`: プログラムを終了
 - `/clear`: 会話履歴を削除
+- `/chatbox on`: Chatbox連携を有効化
+- `/chatbox off`: Chatbox連携を無効化
+- `/chatbox status`: Chatbox連携の状態を表示
+- `/chatbox`: Chatbox連携のON/OFFを切り替え
 - `Ctrl+C`: 実行中の処理をキャンセルして終了
 
 会話履歴は実行中のメモリに保持されます。
@@ -109,8 +101,11 @@ aitsu> こんにちは。今日はどうしましたか？
 
 ## 人格設定
 
-人格は`persona.txt`に記述します。`persona.example.txt`のファイル名を変更して使用してください。
+人格は`persona.txt`に記述します。
 内容はOllamaへの`system`メッセージとして毎回送信されます。
+
+人格設定は4,000文字以内で指定します。
+`persona.example.txt`を参考に編集してください。
 
 ```text
 あなたは「aitsu」という名前の対話AIです。
@@ -118,9 +113,73 @@ aitsu> こんにちは。今日はどうしましたか？
 不明なことは推測で断定せず、分からないと伝えてください。
 ```
 
-人格設定は4,000文字以内で指定します。
+## VRChat Chatbox連携
 
-## 環境変数
+### VRChat側の準備
+
+1. VRChatでOSCを有効にします
+2. VRChatを起動します
+3. VRChatのOSC受信ポートを`9000`にします
+4. Ollamaとaitsuを起動します
+
+VRChatのChatbox連携では、次のOSCアドレスを使用します。
+
+```text
+/chatbox/input
+/chatbox/typing
+```
+
+`/chatbox/input`には、次の形式でユーザー入力とaitsuの返答を送信します。
+
+```text
+You> ユーザーの入力
+aitsu> AIの返答
+```
+
+Chatboxの仕様に合わせ、メッセージは最大144文字・9行単位に分割して送信します。
+
+### aitsu側の設定
+
+PowerShellで次の環境変数を設定します。
+
+```powershell
+$env:AITSU_CHATBOX_ENABLED = "true"
+$env:AITSU_CHATBOX_HOST = "127.0.0.1"
+$env:AITSU_CHATBOX_PORT = "9000"
+$env:AITSU_CHATBOX_NOTIFY = "false"
+dotnet run
+```
+
+設定項目:
+
+- `AITSU_CHATBOX_ENABLED`: Chatbox連携の有効・無効。既定値は`false`
+- `AITSU_CHATBOX_HOST`: OSC送信先。`127.0.0.1`または`::1`のみ指定可能
+- `AITSU_CHATBOX_PORT`: OSC受信ポート。既定値は`9000`
+- `AITSU_CHATBOX_NOTIFY`: Chatbox通知音の有効・無効。既定値は`false`
+
+起動後は、スラッシュコマンドでも状態を変更できます。
+この変更はアプリケーション実行中だけ有効で、次回起動時は環境変数の設定に戻ります。
+
+```text
+You> /chatbox on
+VRChat Chatbox: 有効
+You> /chatbox off
+VRChat Chatbox: 無効
+You> /chatbox status
+VRChat Chatbox: 無効
+```
+
+AIが返答を生成している間は、Chatboxの入力中表示を有効にします。
+返答が完了すると入力中表示を解除し、ユーザー入力と返答を送信します。
+
+Chatbox連携を無効に戻す場合:
+
+```powershell
+$env:AITSU_CHATBOX_ENABLED = "false"
+dotnet run
+```
+
+## Ollamaとaitsuの設定
 
 ```powershell
 $env:OLLAMA_MODEL = "llama3.2"
@@ -134,28 +193,31 @@ dotnet run
 - `AITSU_PERSONA_FILE`: 人格設定ファイルのパス
 
 `AITSU_PERSONA_FILE`の相対パスは、まず現在の作業ディレクトリから解決します。
-HTTP接続はlocalhostなどのループバックアドレスだけが許可されます。
+HTTP接続はループバックアドレスだけが許可されます。
 外部サーバーへ接続する場合はHTTPSを使用してください。
+
+## 処理の流れ
+
+1. `AitsuOptions.cs`がOllama・Chatbox・人格設定を読み込む
+2. `Program.cs`がCLIから入力を受け取る
+3. `ConversationService.cs`が入力と履歴を検証する
+4. `OllamaClient.cs`がOllamaへストリーミングリクエストを送信する
+5. Ollamaの返答をCLIへ逐次表示する
+6. 返答完了後、`VrChatChatboxClient.cs`がユーザー入力と返答をChatboxへOSC送信する
+7. 成功した会話を次のリクエスト用に保存する
 
 ## 既定値と制限
 
-- 接続先: `http://localhost:11434/api/chat`
-- モデル: `llama3.2`
+- Ollama接続先: `http://localhost:11434/api/chat`
+- Ollamaモデル: `llama3.2`
+- Ollamaリクエスト: `stream=true`
 - リクエストタイムアウト: 5分
 - 入力上限: 4,000文字
 - 人格設定上限: 4,000文字
 - 応答上限: 8,000文字
-- 応答本文の読み込み上限: 4,000,000文字
-- Ollamaリクエスト: `stream=true`
-
-## 処理の流れ
-
-1. `AitsuOptions.cs`が接続先、モデル、人格設定を読み込む
-2. `Program.cs`がCLIから入力を受け取る
-3. `ConversationService.cs`が入力と履歴を検証する
-4. `OllamaClient.cs`がOllamaへリクエストを送信する
-5. OllamaのNDJSONストリーミング応答を解析してCLIへ表示する
-6. 成功した会話を次のリクエスト用に保存する
+- 会話履歴: 最大20メッセージ、合計16,000文字
+- Chatbox送信先: `127.0.0.1:9000`
+- Chatbox本文: 最大144文字、最大9行単位
 
 ## トラブルシューティング
 
@@ -175,8 +237,6 @@ Ollamaが起動しているか確認してください。
 ollama list
 ```
 
-既定値以外の接続先を使用する場合は、`OLLAMA_ENDPOINT`を確認してください。
-
 ### モデルが見つからない
 
 使用するモデルを取得してください。
@@ -185,12 +245,17 @@ ollama list
 ollama pull llama3.2
 ```
 
-`OLLAMA_MODEL`を設定した場合は、取得済みのモデル名と一致させてください。
+### VRChat Chatboxに表示されない
+
+- `AITSU_CHATBOX_ENABLED`が`true`か確認する
+- VRChatでOSCが有効か確認する
+- VRChatの受信ポートが`9000`か確認する
+- `AITSU_CHATBOX_HOST`と`AITSU_CHATBOX_PORT`を確認する
+- VRChatを起動してからaitsuを実行する
 
 ## 今後の予定
 
-- Ollama以外のAIクライアント対応
 - 音声認識
 - 音声合成
-- VRChat Chatboxへの表示
-- OSCによるアバターパラメータ制御
+- VRChatアバターパラメータへのOSC送信
+- Ollama以外のAIクライアント対応
