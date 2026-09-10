@@ -68,18 +68,22 @@ internal static class Program
 
                 try
                 {
-                    var response = await conversation.SendAsync(
+                    Console.Write("aitsu> ");
+                    await conversation.SendAsync(
                         input,
+                        token => Console.Write(token),
                         cancellation.Token);
-                    Console.WriteLine($"aitsu> {response}");
+                    Console.WriteLine();
                 }
                 catch (OperationCanceledException)
                     when (cancellation.IsCancellationRequested)
                 {
+                    Console.WriteLine();
                     break;
                 }
                 catch (Exception exception)
                 {
+                    Console.WriteLine();
                     Console.Error.WriteLine(
                         $"エラー: {exception.Message}");
                 }
