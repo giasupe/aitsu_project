@@ -10,4 +10,8 @@
   <ItemGroup>
     <None Update="persona.txt" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
+
+  <ItemGroup>
+    <Compile Remove="Aitsu.Tests/**/*.cs" />
+  </ItemGroup>
 </Project>

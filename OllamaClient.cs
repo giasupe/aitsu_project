@@ -161,8 +161,29 @@ public sealed class OllamaClient : IChatClient
                 continue;
             }
 
-            response.Append(chunk);
-            onToken?.Invoke(chunk);
+            var remainingCharacters =
+                AitsuOptions.MaximumResponseCharacters - response.Length;
+            if (remainingCharacters <= 0)
+            {
+                return response.ToString();
+            }
+
+            var limitedChunk = TakeCharacters(
+                chunk,
+                remainingCharacters);
+            if (limitedChunk.Length == 0)
+            {
+                continue;
+            }
+
+            response.Append(limitedChunk);
+            onToken?.Invoke(limitedChunk);
+
+            if (response.Length
+                >= AitsuOptions.MaximumResponseCharacters)
+            {
+                return response.ToString();
+            }
         }
 
         return response.ToString();
@@ -206,9 +227,26 @@ public sealed class OllamaClient : IChatClient
             return response;
         }
 
-        const string truncationNotice = "\n[応答が長いため省略しました]";
-        var contentLength = AitsuOptions.MaximumResponseCharacters
-            - truncationNotice.Length;
-        return response[..contentLength].TrimEnd() + truncationNotice;
+        return TakeCharacters(
+            response,
+            AitsuOptions.MaximumResponseCharacters);
+    }
+
+    private static string TakeCharacters(
+        string text,
+        int maximumCharacters)
+    {
+        if (text.Length <= maximumCharacters)
+        {
+            return text;
+        }
+
+        var length = maximumCharacters;
+        if (length > 0 && char.IsHighSurrogate(text[length - 1]))
+        {
+            length--;
+        }
+
+        return text[..length];
     }
 }

@@ -10,7 +10,7 @@ public sealed class AitsuOptions
     public const string DefaultPersona =
         "あなたはaitsuです。日本語で簡潔に応答してください。";
     public const int MaximumInputCharacters = 4_000;
-    public const int MaximumResponseCharacters = 8_000;
+    public const int MaximumResponseCharacters = 100;
     public const int MaximumHistoryMessages = 20;
     public const int MaximumHistoryCharacters = 16_000;
     public const int MaximumResponseBodyCharacters = 4_000_000;
@@ -164,6 +164,10 @@ public sealed class AitsuOptions
                     path);
             }
 
+            Console.Error.WriteLine(
+                "persona.txtが見つかりません。"
+                + "persona.example.txtをコピーして作成してください。"
+                + " 例: Copy-Item persona.example.txt persona.txt");
             return DefaultPersona;
         }
 

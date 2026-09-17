@@ -8,8 +8,10 @@ aitsuは、ローカルで動作するOllamaと接続して会話するC#コン�
 - コンソールからの日本語入力
 - Ollama Chat APIへのリクエスト
 - Ollamaのストリーミング応答の逐次表示
+- AI回答の最大100文字出力
 - 人格設定と会話履歴を含む応答生成
 - `/clear`による会話履歴の削除
+- `dotnet test`による自動テスト
 - VRChat ChatboxへのOSC送信
 - AI応答中のVRChat Chatbox入力中表示
 
@@ -32,6 +34,8 @@ aitsu_project/
 ├─ persona.txt                # Ollamaへ渡す人格設定
 ├─ persona.example.txt        # 人格設定の例
 ├─ aitsu.csproj               # .NETプロジェクト設定
+├─ aitsu.sln                  # 本体とテストをまとめるソリューション
+├─ Aitsu.Tests/               # 自動テストプロジェクト
 ├─ global.json                # .NET SDKの選択設定
 ├─ .editorconfig              # コード整形規則
 ├─ .gitignore                 # Git管理から除外するファイル
@@ -72,8 +76,11 @@ ollama list
 ```powershell
 dotnet restore
 dotnet build
+dotnet test
 dotnet run
 ```
+
+`dotnet test`は`aitsu.sln`に含まれる自動テストを実行します。
 
 起動後、`You>`の後にメッセージを入力します。
 
@@ -84,6 +91,16 @@ VRChat Chatbox: 無効
 You> こんにちは
 aitsu> こんにちは。今日はどうしましたか？
 ```
+
+## テスト
+
+本体と`Aitsu.Tests`のテストプロジェクトを`aitsu.sln`で管理しています。
+
+```powershell
+dotnet test .\aitsu.sln
+```
+
+現在は、会話履歴、Ollama応答の100文字制限、Chatbox用テキスト分割をテストしています。
 
 ## CLIコマンド
 
@@ -106,6 +123,15 @@ aitsu> こんにちは。今日はどうしましたか？
 
 人格設定は4,000文字以内で指定します。
 `persona.example.txt`を参考に編集してください。
+`persona.txt`は個人用設定としてGit管理対象外です。
+新しい環境では、次のコマンドで作成してください。
+
+```powershell
+Copy-Item .\persona.example.txt .\persona.txt
+```
+
+`persona.txt`が見つからない場合は、既定の人格設定で起動し、
+作成方法をエラーメッセージに表示します。
 
 ```text
 あなたは「aitsu」という名前の対話AIです。
@@ -214,7 +240,7 @@ HTTP接続はループバックアドレスだけが許可されます。
 - リクエストタイムアウト: 5分
 - 入力上限: 4,000文字
 - 人格設定上限: 4,000文字
-- 応答上限: 8,000文字
+- 応答上限: 100文字
 - 会話履歴: 最大20メッセージ、合計16,000文字
 - Chatbox送信先: `127.0.0.1:9000`
 - Chatbox本文: 最大144文字、最大9行単位
