@@ -18,6 +18,7 @@ public sealed class OllamaClient : IChatClient
     public async Task<string> GenerateResponseAsync(
         string userMessage,
         IReadOnlyList<ConversationMessage> history,
+        Action<string>? onToken = null,
         CancellationToken cancellationToken = default)
     {
         var messages = new[]
@@ -44,7 +45,7 @@ public sealed class OllamaClient : IChatClient
         {
             model = _options.Model,
             messages,
-            stream = false
+            stream = true
         };
 
         using var request = new HttpRequestMessage(
@@ -64,32 +65,24 @@ public sealed class OllamaClient : IChatClient
                     request,
                     HttpCompletionOption.ResponseHeadersRead,
                     requestTimeout.Token);
-            var responseBody = await ReadResponseBodyAsync(
-                response.Content,
-                requestTimeout.Token);
 
             if (!response.IsSuccessStatusCode)
             {
-                var detail = responseBody.Length > 2_000
-                    ? responseBody[..2_000]
-                    : responseBody;
+                var errorBody = await ReadResponseBodyAsync(
+                    response.Content,
+                    requestTimeout.Token);
+                var detail = errorBody.Length > 2_000
+                    ? errorBody[..2_000]
+                    : errorBody;
 
                 throw new InvalidOperationException(
                     $"Ollamaエラー ({(int)response.StatusCode}): {detail}");
             }
 
-            using var document = JsonDocument.Parse(responseBody);
-            if (!document.RootElement.TryGetProperty(
-                    "message",
-                    out var message)
-                || !message.TryGetProperty("content", out var content)
-                || content.ValueKind != JsonValueKind.String)
-            {
-                throw new InvalidOperationException(
-                    "Ollamaの応答からテキストを取得できませんでした。");
-            }
-
-            var text = content.GetString();
+            var text = await ReadStreamingResponseAsync(
+                response.Content,
+                onToken,
+                requestTimeout.Token);
             if (string.IsNullOrWhiteSpace(text))
             {
                 throw new InvalidOperationException(
@@ -118,6 +111,61 @@ public sealed class OllamaClient : IChatClient
                 "Ollamaの応答をJSONとして解析できませんでした。",
                 exception);
         }
+    }
+
+    private static async Task<string> ReadStreamingResponseAsync(
+        HttpContent content,
+        Action<string>? onToken,
+        CancellationToken cancellationToken)
+    {
+        await using var stream = await content.ReadAsStreamAsync(
+            cancellationToken);
+        using var reader = new StreamReader(stream);
+        var response = new StringBuilder();
+        var responseBodyCharacters = 0;
+
+        while (await reader.ReadLineAsync(cancellationToken) is { } line)
+        {
+            if (string.IsNullOrWhiteSpace(line))
+            {
+                continue;
+            }
+
+            responseBodyCharacters += line.Length;
+            if (responseBodyCharacters
+                > AitsuOptions.MaximumResponseBodyCharacters)
+            {
+                throw new InvalidOperationException(
+                    $"Ollamaの応答が{AitsuOptions.MaximumResponseBodyCharacters}文字を超えています。");
+            }
+
+            using var document = JsonDocument.Parse(line);
+            var root = document.RootElement;
+
+            if (root.TryGetProperty("error", out var error))
+            {
+                throw new InvalidOperationException(
+                    $"Ollamaエラー: {error}");
+            }
+
+            if (!root.TryGetProperty("message", out var message)
+                || !message.TryGetProperty("content", out var contentPart)
+                || contentPart.ValueKind != JsonValueKind.String)
+            {
+                continue;
+            }
+
+            var chunk = contentPart.GetString();
+            if (string.IsNullOrEmpty(chunk))
+            {
+                continue;
+            }
+
+            response.Append(chunk);
+            onToken?.Invoke(chunk);
+        }
+
+        return response.ToString();
     }
 
     private static async Task<string> ReadResponseBodyAsync(

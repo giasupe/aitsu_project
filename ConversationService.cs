@@ -14,6 +14,7 @@ public sealed class ConversationService
 
     public async Task<string> SendAsync(
         string userMessage,
+        Action<string>? onToken = null,
         CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(userMessage))
@@ -33,6 +34,7 @@ public sealed class ConversationService
         var response = await _client.GenerateResponseAsync(
             userMessage,
             _history,
+            onToken,
             cancellationToken);
 
         _history.Add(new ConversationMessage("user", userMessage));
