@@ -15,7 +15,7 @@ while (true)
         "http://localhost:11434/api/chat",
         new // 匿名オブジェクトを作成
         {
-            model = "llama3.2",
+            model = "Gemma4:26b",
             messages = new[] // messagesに配列を入れる
             {
                 new // 配列に入れる匿名オブジェクトを作成
@@ -32,7 +32,7 @@ while (true)
     var json = JsonDocument.Parse(
         await response.Content.ReadAsStringAsync()
     );
-    
+
     var output = json.RootElement
         .GetProperty("message")
         .GetProperty("content")
